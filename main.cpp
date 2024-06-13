@@ -1,6 +1,7 @@
 #include <ntifs.h>
 #include <intrin.h>
 #include "hook.h"
+#include "util.h"
 
 using fnNtCreateFile = NTSTATUS(*)(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
 	PLARGE_INTEGER AllocationSize, ULONG FileAttributes, ULONG ShareAccess, ULONG CreateDisposition, ULONG CreateOptions, PVOID EaBuffer, ULONG EaLength);
@@ -61,6 +62,30 @@ extern "C" NTSTATUS DriverEntry(DRIVER_OBJECT* DriverObject, PUNICODE_STRING) {
 
 	DriverObject->DriverUnload = [](DRIVER_OBJECT*) -> void {
 
+		for (unsigned __int64 i = 0; i < Hooks.Number; i++) {
+
+			auto item = Hooks.data[i];
+
+			PEPROCESS Process = nullptr;
+			auto Status = PsLookupProcessByProcessId(item->ProcessId, &Process);
+
+			if (NT_SUCCESS(Status)) {
+
+				KAPC_STATE ApcState{};
+				KeStackAttachProcess(Process, &ApcState);
+
+				KeMdlCopyMemory(item->SystemRoutineAddress, item->PathBytes, item->PatchSize);
+
+				KeUnstackDetachProcess(&ApcState);
+
+				ObDereferenceObject(Process);
+			}
+
+			ExFreePoolWithTag(item->Trampoline, '0etP');
+
+			ExFreePoolWithTag(item, '0etP');
+		}
+
 	};
 
 	auto Status = STATUS_SUCCESS;
@@ -69,9 +94,24 @@ extern "C" NTSTATUS DriverEntry(DRIVER_OBJECT* DriverObject, PUNICODE_STRING) {
 	RtlInitUnicodeString(&fName, L"NtCreateFile");
 	auto OriginAddress = MmGetSystemRoutineAddress(&fName);
 
-	fNtCreateFileTrampoline = reinterpret_cast<fnNtCreateFile>(CreateTrampoline(reinterpret_cast<unsigned __int64>(OriginAddress), 14));
+	auto data = reinterpret_cast<HookMap*>(ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(HookMap), '0etP'));
 
-	SetInlineHook(ULongToHandle(5144), OriginAddress, fNtCreateFile);
+	if (data) {
+
+		fNtCreateFileTrampoline = reinterpret_cast<fnNtCreateFile>(CreateTrampoline(reinterpret_cast<unsigned __int64>(OriginAddress), 14));
+
+		data->SystemRoutineName = RTL_CONSTANT_STRING(L"NtCreateFile");
+		data->PatchSize = 14;
+		data->SystemRoutineAddress = OriginAddress;
+		data->Trampoline = fNtCreateFileTrampoline;
+
+		RtlCopyMemory(data->PathBytes, OriginAddress, data->PatchSize);
+
+		Hooks.data[Hooks.Number] = data;
+		Hooks.Number++;
+	}
+
+	SetInlineHook(ULongToHandle(4020), OriginAddress, fNtCreateFile,data);
 
 	return Status;
 };

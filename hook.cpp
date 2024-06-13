@@ -1,9 +1,9 @@
 #include <ntifs.h>
 #include <intrin.h>
-#include "util.h"
 #include "hook.h"
+#include "util.h"
 
-bool SetInlineHook(HANDLE ProcessId, void* OriginAddress, void* Handler) {
+bool SetInlineHook(HANDLE ProcessId, void* OriginAddress, void* Handler, HookMap* data) {
 
 	PEPROCESS Process = nullptr;
 	auto Status = PsLookupProcessByProcessId(ProcessId, &Process);
@@ -33,13 +33,13 @@ bool SetInlineHook(HANDLE ProcessId, void* OriginAddress, void* Handler) {
 				break;
 			}
 
-			if (!IsolationPageTable(&PageTable, PtVa)) {
+			if (!IsolationPageTable(&PageTable, data, PtVa)) {
 				break;
 			}
 
 		} else {
 
-			if (!IsolationPageTable(&PageTable)) {
+			if (!IsolationPageTable(&PageTable, data)) {
 				break;
 			}
 		}
@@ -66,7 +66,7 @@ bool SetInlineHook(HANDLE ProcessId, void* OriginAddress, void* Handler) {
 	return IsSuccess;
 }
 
-bool IsolationPageTable(PAGE_TABLE* PageTable, PTE* PdeToPt_Va) {
+bool IsolationPageTable(PAGE_TABLE* PageTable, HookMap* data,PTE* PdeToPt_Va) {
 
 	auto PageTableMemory = (unsigned __int64)KeAllocateContiguousMemorySpecifyCache(PAGE_SIZE * 3, MmCached);
 	if (!PageTableMemory) {

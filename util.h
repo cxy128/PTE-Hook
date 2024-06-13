@@ -2,19 +2,19 @@
 
 #include <ntifs.h>
 
-unsigned __int64* MmPaToVa(unsigned __int64 Pa) {
+inline unsigned __int64* MmPaToVa(unsigned __int64 Pa) {
 
 	PHYSICAL_ADDRESS __Pa{};
 	__Pa.QuadPart = Pa;
 	return reinterpret_cast<unsigned __int64*>(MmGetVirtualForPhysical(__Pa));
 }
 
-unsigned __int64 MmVaToPa(void* Va) {
+inline unsigned __int64 MmVaToPa(void* Va) {
 
 	return static_cast<unsigned __int64>(MmGetPhysicalAddress(Va).QuadPart);
 }
 
-bool KeMdlCopyMemory(void* TargetAddress, void* SourceAddress, unsigned __int64 SourceLength) {
+inline bool KeMdlCopyMemory(void* TargetAddress, void* SourceAddress, unsigned __int64 SourceLength) {
 
 	MDL* Mdl = IoAllocateMdl(TargetAddress, PAGE_SIZE, false, false, nullptr);
 	if (!Mdl) {
@@ -25,14 +25,6 @@ bool KeMdlCopyMemory(void* TargetAddress, void* SourceAddress, unsigned __int64 
 
 	void* fAddress = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
 	if (!fAddress) {
-		IoFreeMdl(Mdl);
-		return false;
-	}
-
-	__debugbreak();
-
-	auto Status = MmProtectMdlSystemAddress(Mdl, PAGE_EXECUTE_READWRITE);
-	if (NT_ERROR(Status)) {
 		IoFreeMdl(Mdl);
 		return false;
 	}
@@ -52,7 +44,7 @@ bool KeMdlCopyMemory(void* TargetAddress, void* SourceAddress, unsigned __int64 
 	return true;
 }
 
-void* KeAllocateContiguousMemorySpecifyCache(SIZE_T NumberOfBytes, MEMORY_CACHING_TYPE CacheType) {
+inline void* KeAllocateContiguousMemorySpecifyCache(SIZE_T NumberOfBytes, MEMORY_CACHING_TYPE CacheType) {
 
 	PHYSICAL_ADDRESS LowestAddress{};
 

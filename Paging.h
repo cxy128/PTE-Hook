@@ -115,7 +115,6 @@ struct PAGE_TABLE {
 	unsigned __int64 Pde;
 	unsigned __int64 Pdpte;
 	unsigned __int64 Pml4e;
-
 };
 
 inline unsigned __int64 GetPageTableBase() {
