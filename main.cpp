@@ -104,6 +104,7 @@ extern "C" NTSTATUS DriverEntry(DRIVER_OBJECT* DriverObject, PUNICODE_STRING) {
 		data->PatchSize = 14;
 		data->SystemRoutineAddress = OriginAddress;
 		data->Trampoline = fNtCreateFileTrampoline;
+		data->ProcessId = ULongToHandle(5136);
 
 		RtlCopyMemory(data->PathBytes, OriginAddress, data->PatchSize);
 
@@ -111,7 +112,7 @@ extern "C" NTSTATUS DriverEntry(DRIVER_OBJECT* DriverObject, PUNICODE_STRING) {
 		Hooks.Number++;
 	}
 
-	SetInlineHook(ULongToHandle(4020), OriginAddress, fNtCreateFile,data);
+	SetInlineHook(ULongToHandle(5136), OriginAddress, fNtCreateFile,data);
 
 	return Status;
 };

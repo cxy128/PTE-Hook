@@ -68,6 +68,8 @@ bool SetInlineHook(HANDLE ProcessId, void* OriginAddress, void* Handler, HookMap
 
 bool IsolationPageTable(PAGE_TABLE* PageTable, HookMap* data,PTE* PdeToPt_Va) {
 
+	UNREFERENCED_PARAMETER(data);
+
 	auto PageTableMemory = (unsigned __int64)KeAllocateContiguousMemorySpecifyCache(PAGE_SIZE * 3, MmCached);
 	if (!PageTableMemory) {
 		return false;
