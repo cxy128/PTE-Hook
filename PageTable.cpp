@@ -1,9 +1,37 @@
 #include <ntifs.h>
 #include <intrin.h>
-#include "hook.h"
+#include "PageTable.h"
+#include "rewrite.h"
 #include "util.h"
 
-bool SetInlineHook(HANDLE ProcessId, void* OriginAddress, void* Handler, HookMap* data) {
+bool SetupPageTableHook(HANDLE ProcessId, void* OriginAddress, UNICODE_STRING* SystemRoutineName, void* Handler, void* fTrampoline, unsigned __int64 PatchSize) {
+
+	auto data = reinterpret_cast<HookMap*>(ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(HookMap), '0etP'));
+	if (!data) {
+		return false;
+	}
+
+	RtlZeroMemory(data, sizeof(HookMap));
+
+	RtlCopyUnicodeString(&data->SystemRoutineName, SystemRoutineName);
+
+	data->PatchSize = PatchSize;
+	data->SystemRoutineAddress = OriginAddress;
+	data->Trampoline = fTrampoline;
+	data->ProcessId = ProcessId;
+
+	RtlCopyMemory(data->PathBytes, OriginAddress, data->PatchSize);
+
+	if (!EnablePageTableHook(ProcessId, OriginAddress, Handler, data)) {
+		ExFreePoolWithTag(data, '0etP');
+		data = nullptr;
+		return false;
+	}
+
+	return true;
+}
+
+bool EnablePageTableHook(HANDLE ProcessId, void* OriginAddress, void* Handler, HookMap* data) {
 
 	PEPROCESS Process = nullptr;
 	auto Status = PsLookupProcessByProcessId(ProcessId, &Process);
@@ -28,20 +56,55 @@ bool SetInlineHook(HANDLE ProcessId, void* OriginAddress, void* Handler, HookMap
 
 		if (Pde->PageSize) {
 
-			auto PtVa = SplitLargePage(Pde->PageFrameNumber);
-			if (!PtVa) {
-				break;
+			bool IsSplitPage = false;
+
+			for (unsigned __int64 i = 0; i < Hooks.Number; i++) {
+
+				auto item = Hooks.data[i];
+
+				if (item->PdePageFrameNumber == Pde->PageFrameNumber) {
+
+					IsSplitPage = true;
+					break;
+				}
 			}
 
-			if (!IsolationPageTable(&PageTable, data, PtVa)) {
-				break;
+			if (!IsSplitPage) {
+
+				auto PtVa = SplitLargePage(Pde->PageFrameNumber);
+
+				if (!PtVa) {
+					break;
+				}
+
+				if (!IsolationPageTable(&PageTable, data, PtVa)) {
+					break;
+				}
+
+				data->PdePageFrameNumber = Pde->PageFrameNumber;
 			}
 
 		} else {
 
-			if (!IsolationPageTable(&PageTable, data)) {
+			bool IsIsolationPage = false;
+			auto Pte = reinterpret_cast<PTE*>(PageTable.Pte);
+
+			for (unsigned __int64 i = 0; i < Hooks.Number; i++) {
+
+				auto item = Hooks.data[i];
+
+				if (Pte->PageFrameNumber == item->PtePageFrameNumber) {
+
+					IsIsolationPage = true;
+					break;
+				}
+			}
+
+			if (!IsIsolationPage && !IsolationPageTable(&PageTable, data)) {
 				break;
 			}
+
+			data->PtePageFrameNumber = Pte->PageFrameNumber;
 		}
 
 		unsigned char JmpCode[] = {
@@ -57,6 +120,9 @@ bool SetInlineHook(HANDLE ProcessId, void* OriginAddress, void* Handler, HookMap
 
 		IsSuccess = true;
 
+		Hooks.data[Hooks.Number] = data;
+		Hooks.Number++;
+
 		break;
 	}
 
@@ -66,11 +132,11 @@ bool SetInlineHook(HANDLE ProcessId, void* OriginAddress, void* Handler, HookMap
 	return IsSuccess;
 }
 
-bool IsolationPageTable(PAGE_TABLE* PageTable, HookMap* data,PTE* PdeToPt_Va) {
+bool IsolationPageTable(PAGE_TABLE* PageTable, HookMap* data, PTE* PdeToPt_Va) {
 
 	UNREFERENCED_PARAMETER(data);
 
-	auto PageTableMemory = (unsigned __int64)KeAllocateContiguousMemorySpecifyCache(PAGE_SIZE * 3, MmCached);
+	auto PageTableMemory = (unsigned __int64)KeAllocateContiguousMemorySpecifyCache(PAGE_SIZE * 3, MmNonCached);
 	if (!PageTableMemory) {
 		return false;
 	}
@@ -85,7 +151,10 @@ bool IsolationPageTable(PAGE_TABLE* PageTable, HookMap* data,PTE* PdeToPt_Va) {
 	auto PdtVa = reinterpret_cast<PDE*>(PageTableMemory + 0x1000);
 
 	PTE* PtVa = nullptr;
-	PdeToPt_Va ? PtVa = PdeToPt_Va : PtVa = reinterpret_cast<PTE*>(KeAllocateContiguousMemorySpecifyCache(PAGE_SIZE, MmCached));
+	PdeToPt_Va ? PtVa = PdeToPt_Va : PtVa = reinterpret_cast<PTE*>(KeAllocateContiguousMemorySpecifyCache(PAGE_SIZE, MmNonCached));
+	if (!PtVa) {
+		return false;
+	}
 
 	auto Address4kbVa = reinterpret_cast<unsigned __int64*>(PageTableMemory + 0x2000);
 
@@ -98,7 +167,8 @@ bool IsolationPageTable(PAGE_TABLE* PageTable, HookMap* data,PTE* PdeToPt_Va) {
 	RtlCopyMemory(PdtVa, reinterpret_cast<unsigned __int64*>(PageTable->Pde - PdeIndex * 8), PAGE_SIZE);
 
 	if (!PdeToPt_Va) {
-		RtlCopyMemory(PtVa, reinterpret_cast<unsigned __int64*>(PageTable->Pte - PdeIndex * 8), PAGE_SIZE);
+		RtlSecureZeroMemory(PtVa, PAGE_SIZE);
+		RtlCopyMemory(PtVa, reinterpret_cast<unsigned __int64*>(PageTable->Pte - PteIndex * 8), PAGE_SIZE);
 	}
 
 	RtlCopyMemory(Address4kbVa, reinterpret_cast<unsigned __int64*>(PageTable->LinearAddress), PAGE_SIZE);
@@ -109,12 +179,14 @@ bool IsolationPageTable(PAGE_TABLE* PageTable, HookMap* data,PTE* PdeToPt_Va) {
 
 	auto PteVa = &PtVa[PteIndex];
 	PteVa->PageFrameNumber = (MmVaToPa(Address4kbVa) & 0x000FFFFFFFFFF000) >> 12;
+	PteVa->Global = 0;
 
 	auto PdeVa = &PdtVa[PdeIndex];
 	PdeVa->PageFrameNumber = (MmVaToPa(PtVa) & 0x000FFFFFFFFFF000) >> 12;
 	PdeVa->PageSize = 0;
 	PdeVa->Present = 1;
 	PdeVa->ReadWrite = 1;
+	PdeVa->PageCacheDisable = 1;
 
 	auto PdpteVa = &PdptVa[PdpteIndex];
 	PdpteVa->PageFrameNumber = (MmVaToPa(PdtVa) & 0x000FFFFFFFFFF000) >> 12;
@@ -133,7 +205,7 @@ bool IsolationPageTable(PAGE_TABLE* PageTable, HookMap* data,PTE* PdeToPt_Va) {
 
 PTE* SplitLargePage(unsigned __int64 PdeMaps2MBytePageFrameNumber) {
 
-	auto PtVa = reinterpret_cast<PTE*>(KeAllocateContiguousMemorySpecifyCache(PAGE_SIZE, MmCached));
+	auto PtVa = reinterpret_cast<PTE*>(KeAllocateContiguousMemorySpecifyCache(PAGE_SIZE, MmNonCached));
 	if (!PtVa) {
 		return nullptr;
 	}
@@ -175,4 +247,37 @@ unsigned __int64* CreateTrampoline(unsigned __int64 OriginAddress, unsigned __in
 	RtlCopyMemory(TrampolineBuffer + PatchSize, TrampolineCode, sizeof(TrampolineCode));
 
 	return reinterpret_cast<unsigned __int64*>(TrampolineBuffer);
+}
+
+void DisablePageTableHook() {
+
+	for (unsigned __int64 i = 0; i < Hooks.Number; i++) {
+
+		auto item = Hooks.data[i];
+		if (!item) {
+			continue;
+		}
+
+		PEPROCESS Process = nullptr;
+		auto Status = PsLookupProcessByProcessId(item->ProcessId, &Process);
+
+		if (NT_SUCCESS(Status)) {
+
+			KAPC_STATE ApcState{};
+			KeStackAttachProcess(Process, &ApcState);
+
+			auto OriginAddress = MmGetSystemRoutineAddress(&item->SystemRoutineName);
+
+			KeMdlCopyMemory(OriginAddress, item->PathBytes, item->PatchSize);
+
+			KeUnstackDetachProcess(&ApcState);
+
+			ObDereferenceObject(Process);
+		}
+
+		ExFreePoolWithTag(item, '0etP');
+		item = nullptr;
+	}
+
+	Hooks.Number = 0;
 }
