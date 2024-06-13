@@ -16,7 +16,7 @@ struct HookMap {
 
 struct HookInformation {
 
-	HookMap* data[1];
+	HookMap* data[10];
 	unsigned __int64 Number;
 };
 

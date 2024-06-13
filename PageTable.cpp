@@ -6,14 +6,14 @@
 
 bool SetupPageTableHook(HANDLE ProcessId, void* OriginAddress, UNICODE_STRING* SystemRoutineName, void* Handler, void* fTrampoline, unsigned __int64 PatchSize) {
 
+	UNREFERENCED_PARAMETER(SystemRoutineName);
+
 	auto data = reinterpret_cast<HookMap*>(ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(HookMap), '0etP'));
 	if (!data) {
 		return false;
 	}
 
 	RtlZeroMemory(data, sizeof(HookMap));
-
-	RtlCopyUnicodeString(&data->SystemRoutineName, SystemRoutineName);
 
 	data->PatchSize = PatchSize;
 	data->SystemRoutineAddress = OriginAddress;
@@ -179,7 +179,6 @@ bool IsolationPageTable(PAGE_TABLE* PageTable, HookMap* data, PTE* PdeToPt_Va) {
 
 	auto PteVa = &PtVa[PteIndex];
 	PteVa->PageFrameNumber = (MmVaToPa(Address4kbVa) & 0x000FFFFFFFFFF000) >> 12;
-	PteVa->Global = 0;
 
 	auto PdeVa = &PdtVa[PdeIndex];
 	PdeVa->PageFrameNumber = (MmVaToPa(PtVa) & 0x000FFFFFFFFFF000) >> 12;
@@ -218,6 +217,9 @@ PTE* SplitLargePage(unsigned __int64 PdeMaps2MBytePageFrameNumber) {
 		(&PtVa[i])->Present = 1;
 		(&PtVa[i])->ReadWrite = 1;
 		(&PtVa[i])->Global = 0;
+		(&PtVa[i])->PageAccessType = 0;
+		(&PtVa[i])->PageCacheDisable = 1;
+		(&PtVa[i])->UserSupervisor = 1;
 		(&PtVa[i])->PageFrameNumber = PtePageFrameNumber + i;
 	}
 
@@ -266,16 +268,13 @@ void DisablePageTableHook() {
 			KAPC_STATE ApcState{};
 			KeStackAttachProcess(Process, &ApcState);
 
-			auto OriginAddress = MmGetSystemRoutineAddress(&item->SystemRoutineName);
-
-			KeMdlCopyMemory(OriginAddress, item->PathBytes, item->PatchSize);
+			KeMdlCopyMemory(item->SystemRoutineAddress, item->PathBytes, item->PatchSize);
 
 			KeUnstackDetachProcess(&ApcState);
 
 			ObDereferenceObject(Process);
 		}
 
-		ExFreePoolWithTag(item, '0etP');
 		item = nullptr;
 	}
 

@@ -11,6 +11,15 @@ extern "C" NTSTATUS DriverEntry(DRIVER_OBJECT* DriverObject, UNICODE_STRING*) {
 		DisablePageTableHook();
 	};
 
+	auto Process = GetProcessByName(L"sublime_text.exe");
+	if (!Process) {
+		return STATUS_ACCESS_DENIED;
+	}
+
+	auto ProcessId = PsGetProcessId(Process);
+
+	ObDereferenceObject(Process);
+
 	auto Status = STATUS_SUCCESS;
 
 	UNICODE_STRING NtOpenFileName{};
@@ -19,7 +28,7 @@ extern "C" NTSTATUS DriverEntry(DRIVER_OBJECT* DriverObject, UNICODE_STRING*) {
 
 	fNtOpenFileTrampoline = reinterpret_cast<fnNtOpenFile>(CreateTrampoline(reinterpret_cast<unsigned __int64>(NtOpenFileAddress), 17));
 
-	if (!SetupPageTableHook(ULongToHandle(5316), NtOpenFileAddress, &NtOpenFileName, fNtOpenFile, fNtOpenFileTrampoline, 17)) {
+	if (!SetupPageTableHook(ProcessId, NtOpenFileAddress, &NtOpenFileName, fNtOpenFile, fNtOpenFileTrampoline, 17)) {
 		return STATUS_ACCESS_DENIED;
 	}
 
@@ -29,7 +38,7 @@ extern "C" NTSTATUS DriverEntry(DRIVER_OBJECT* DriverObject, UNICODE_STRING*) {
 
 	fNtCreateFileTrampoline = reinterpret_cast<fnNtCreateFile>(CreateTrampoline(reinterpret_cast<unsigned __int64>(NtCreateFileAddress), 14));
 
-	if (!SetupPageTableHook(ULongToHandle(5316), NtCreateFileAddress, &NtCreateFileName, fNtCreateFile, fNtCreateFileTrampoline, 14)) {
+	if (!SetupPageTableHook(ProcessId, NtCreateFileAddress, &NtCreateFileName, fNtCreateFile, fNtCreateFileTrampoline, 14)) {
 		return STATUS_ACCESS_DENIED;
 	}
 
