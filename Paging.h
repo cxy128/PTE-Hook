@@ -67,10 +67,11 @@ struct PDE {
 			unsigned __int64 PageWriteThrough : 1;
 			unsigned __int64 PageCacheDisable : 1;
 			unsigned __int64 Accessed : 1;
-			unsigned __int64 Ignored1 : 1;
+			unsigned __int64 Dirty : 1;
 			unsigned __int64 PageSize : 1;
-			unsigned __int64 Ignored2 : 3;
-			unsigned __int64 Ignored3 : 1;
+			unsigned __int64 Global : 1;
+			unsigned __int64 Ignored : 2;
+			unsigned __int64 Ignored2 : 1;
 			unsigned __int64 PageFrameNumber : 36;
 			unsigned __int64 Reserved : 4;
 			unsigned __int64 Ignored4 : 11;

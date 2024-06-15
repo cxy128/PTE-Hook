@@ -8,6 +8,7 @@ extern "C" NTSTATUS DriverEntry(DRIVER_OBJECT* DriverObject, UNICODE_STRING*) {
 
 	DriverObject->DriverUnload = [](DRIVER_OBJECT*) -> void {
 
+		KeTerminateProcess();
 	};
 
 	auto Process = GetProcessByName(L"sublime_text.exe");
@@ -21,21 +22,15 @@ extern "C" NTSTATUS DriverEntry(DRIVER_OBJECT* DriverObject, UNICODE_STRING*) {
 
 	UNICODE_STRING NtOpenFileName{};
 	RtlInitUnicodeString(&NtOpenFileName, L"NtOpenFile");
-	auto NtOpenFileAddress = MmGetSystemRoutineAddress(&NtOpenFileName);
-
-	fNtOpenFileTrampoline = reinterpret_cast<fnNtOpenFile>(CreateTrampoline(reinterpret_cast<unsigned __int64>(NtOpenFileAddress), 17));
-
-	if (!SetupPageTableHook(ProcessId, NtOpenFileAddress, &NtOpenFileName, fNtOpenFile, fNtOpenFileTrampoline, 17)) {
+	fNtOpenFileTrampoline = reinterpret_cast<fnNtOpenFile>(MmGetSystemRoutineAddress(&NtOpenFileName));
+	if (!SetupPageTableHook(ProcessId, reinterpret_cast<void**>(&fNtOpenFileTrampoline), fNtOpenFile, 17)) {
 		return STATUS_ACCESS_DENIED;
 	}
 
 	UNICODE_STRING NtCreateFileName{};
 	RtlInitUnicodeString(&NtCreateFileName, L"NtCreateFile");
-	auto NtCreateFileAddress = MmGetSystemRoutineAddress(&NtCreateFileName);
-
-	fNtCreateFileTrampoline = reinterpret_cast<fnNtCreateFile>(CreateTrampoline(reinterpret_cast<unsigned __int64>(NtCreateFileAddress), 14));
-
-	if (!SetupPageTableHook(ProcessId, NtCreateFileAddress, &NtCreateFileName, fNtCreateFile, fNtCreateFileTrampoline, 14)) {
+	fNtCreateFileTrampoline = reinterpret_cast<fnNtCreateFile>(MmGetSystemRoutineAddress(&NtCreateFileName));
+	if (!SetupPageTableHook(ProcessId, reinterpret_cast<void**>(&fNtCreateFileTrampoline), fNtCreateFile, 14)) {
 		return STATUS_ACCESS_DENIED;
 	}
 

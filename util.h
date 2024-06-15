@@ -85,7 +85,7 @@ inline bool KeMdlCopyMemory(void* TargetAddress, void* SourceAddress, unsigned _
 
 	MmBuildMdlForNonPagedPool(Mdl);
 
-	void* fAddress = MmMapLockedPagesSpecifyCache(Mdl, KernelMode, MmNonCached, nullptr, false, NormalPagePriority);
+	void* fAddress = MmMapLockedPagesSpecifyCache(Mdl, KernelMode, MmCached, nullptr, false, NormalPagePriority);
 	if (!fAddress) {
 		IoFreeMdl(Mdl);
 		return false;
@@ -158,18 +158,22 @@ inline PEPROCESS GetProcessByName(const wchar_t* ProcessName) {
 
 		for (;;) {
 
-			if (!__ProcessBuffer->NextEntryOffset) {
+			if (!__ProcessBuffer) {
 				break;
 			}
 
 			if (!RtlCompareUnicodeString(&__ProcessBuffer->ImageName, &__ProcessName, TRUE)) {
 
-				Status = PsLookupProcessByProcessId(__ProcessBuffer->ProcessId, &Process);
+				PsLookupProcessByProcessId(__ProcessBuffer->ProcessId, &Process);
 				break;
 			}
 
 			__ProcessBuffer =
 				reinterpret_cast<SYSTEM_PROCESS_INFORMATION*>((unsigned __int64)__ProcessBuffer + __ProcessBuffer->NextEntryOffset);
+
+			if (!__ProcessBuffer->NextEntryOffset) {
+				break;
+			}
 		}
 	}
 

@@ -2,34 +2,25 @@
 
 #include "Paging.h"
 
-struct HookMap {
+struct TerminalProcessId {
 
-	HANDLE ProcessId;
-	UNICODE_STRING SystemRoutineName;
-	void* SystemRoutineAddress;
-	unsigned __int64 PatchSize;
-	char PathBytes[256];
-	void* Trampoline;
-	unsigned __int64 PdePageFrameNumber;
-	unsigned __int64 PtePageFrameNumber;
+	HANDLE ProcessIdList[100];
+	unsigned __int32 Number;
+	unsigned __int32 MaxNumber = 100;
 };
 
-struct HookInformation {
+inline TerminalProcessId __TerminalProcessId;
 
-	HookMap* data[10];
-	unsigned __int64 Number;
-};
+bool SetupPageTableHook(HANDLE ProcessId, void** OriginToTrampoline, void* HandlerAddress, unsigned __int64 PatchSize);
 
-inline HookInformation Hooks = {};
+bool KeReplacePageTable(PEPROCESS Process, void* OriginAddress);
 
-bool SetupPageTableHook(HANDLE ProcessId, void* OriginAddress, UNICODE_STRING* SystemRoutineName, void* Handler, void* fTrampoline, unsigned __int64 PatchSize);
+bool IsolationPageTable(PAGE_TABLE* PageTable, unsigned __int64* PdeToPt_Va);
 
-bool EnablePageTableHook(HANDLE ProcessId, void* OriginAddress, void* Handler, HookMap* data);
+unsigned __int64* SplitLargePage(unsigned __int64 PdePa);
 
 unsigned __int64* CreateTrampoline(unsigned __int64 OriginAddress, unsigned __int64 PatchSize);
 
-bool IsolationPageTable(PAGE_TABLE* PageTable, HookMap* data, PTE* PdeToPt_Va = nullptr);
+bool SetOriginAddressJmpHandlerAddress(PEPROCESS Process, void* OriginAddress, void* HandlerAddress);
 
-PTE* SplitLargePage(unsigned __int64 PdeMaps2MBytePageFrameNumber);
-
-void DisablePageTableHook();
+void KeTerminateProcess();

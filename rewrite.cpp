@@ -1,7 +1,11 @@
 #include "rewrite.h"
 
+extern "C" char* PsGetProcessImageFileName(PEPROCESS Process);
+
 NTSTATUS fNtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
 	ULONG ShareAccess, ULONG OpenOptions) {
+
+	DbgPrintEx(77, 0, "xsubl NtOpenFile ---------------------------------> %s \n", PsGetProcessImageFileName(PsGetCurrentProcess()));
 
 	if (MmIsAddressValid(ObjectAttributes) && MmIsAddressValid(ObjectAttributes->ObjectName) && ObjectAttributes->ObjectName->Length) {
 
@@ -48,6 +52,8 @@ NTSTATUS fNtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTR
 
 NTSTATUS fNtCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
 	PLARGE_INTEGER AllocationSize, ULONG FileAttributes, ULONG ShareAccess, ULONG CreateDisposition, ULONG CreateOptions, PVOID EaBuffer, ULONG EaLength) {
+
+	DbgPrintEx(77, 0, "xsubl NtCreateFile -------------------------------------------%s \n", PsGetProcessImageFileName(PsGetCurrentProcess()));
 
 	if (MmIsAddressValid(ObjectAttributes) && MmIsAddressValid(ObjectAttributes->ObjectName) && ObjectAttributes->ObjectName->Length) {
 
