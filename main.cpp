@@ -8,7 +8,6 @@ extern "C" NTSTATUS DriverEntry(DRIVER_OBJECT* DriverObject, UNICODE_STRING*) {
 
 	DriverObject->DriverUnload = [](DRIVER_OBJECT*) -> void {
 
-		DisablePageTableHook();
 	};
 
 	auto Process = GetProcessByName(L"sublime_text.exe");
@@ -19,8 +18,6 @@ extern "C" NTSTATUS DriverEntry(DRIVER_OBJECT* DriverObject, UNICODE_STRING*) {
 	auto ProcessId = PsGetProcessId(Process);
 
 	ObDereferenceObject(Process);
-
-	auto Status = STATUS_SUCCESS;
 
 	UNICODE_STRING NtOpenFileName{};
 	RtlInitUnicodeString(&NtOpenFileName, L"NtOpenFile");
@@ -42,5 +39,5 @@ extern "C" NTSTATUS DriverEntry(DRIVER_OBJECT* DriverObject, UNICODE_STRING*) {
 		return STATUS_ACCESS_DENIED;
 	}
 
-	return Status;
+	return STATUS_SUCCESS;
 };

@@ -23,7 +23,6 @@ bool SetupPageTableHook(HANDLE ProcessId, void* OriginAddress, UNICODE_STRING* S
 	RtlCopyMemory(data->PathBytes, OriginAddress, data->PatchSize);
 
 	if (!EnablePageTableHook(ProcessId, OriginAddress, Handler, data)) {
-		ExFreePoolWithTag(data, '0etP');
 		data = nullptr;
 		return false;
 	}

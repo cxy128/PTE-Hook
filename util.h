@@ -85,8 +85,15 @@ inline bool KeMdlCopyMemory(void* TargetAddress, void* SourceAddress, unsigned _
 
 	MmBuildMdlForNonPagedPool(Mdl);
 
-	void* fAddress = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
+	void* fAddress = MmMapLockedPagesSpecifyCache(Mdl, KernelMode, MmNonCached, nullptr, false, NormalPagePriority);
 	if (!fAddress) {
+		IoFreeMdl(Mdl);
+		return false;
+	}
+
+	auto Status = MmProtectMdlSystemAddress(Mdl, PAGE_EXECUTE_READWRITE);
+	if (NT_ERROR(Status)) {
+		MmUnmapLockedPages(fAddress, Mdl);
 		IoFreeMdl(Mdl);
 		return false;
 	}
@@ -95,11 +102,13 @@ inline bool KeMdlCopyMemory(void* TargetAddress, void* SourceAddress, unsigned _
 
 	_disable();
 
-	RtlCopyMemory(fAddress, SourceAddress, SourceLength);
+	RtlMoveMemory(fAddress, SourceAddress, SourceLength);
 
 	_enable();
 
 	KeLeaveCriticalRegion();
+
+	MmUnmapLockedPages(fAddress, Mdl);
 
 	IoFreeMdl(Mdl);
 
