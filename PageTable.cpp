@@ -23,6 +23,7 @@ bool SetupPageTableHook(HANDLE ProcessId, void* OriginAddress, UNICODE_STRING* S
 	RtlCopyMemory(data->PathBytes, OriginAddress, data->PatchSize);
 
 	if (!EnablePageTableHook(ProcessId, OriginAddress, Handler, data)) {
+		ExFreePoolWithTag(data, '0etP');
 		data = nullptr;
 		return false;
 	}
@@ -61,8 +62,7 @@ bool EnablePageTableHook(HANDLE ProcessId, void* OriginAddress, void* Handler, H
 
 				auto item = Hooks.data[i];
 
-				if (item->PdePageFrameNumber == Pde->PageFrameNumber) {
-
+				if (item && item->PdePageFrameNumber == Pde->PageFrameNumber) {
 					IsSplitPage = true;
 					break;
 				}
@@ -80,6 +80,8 @@ bool EnablePageTableHook(HANDLE ProcessId, void* OriginAddress, void* Handler, H
 					break;
 				}
 
+				Pde->PageSize = 0;
+
 				data->PdePageFrameNumber = Pde->PageFrameNumber;
 			}
 
@@ -92,8 +94,7 @@ bool EnablePageTableHook(HANDLE ProcessId, void* OriginAddress, void* Handler, H
 
 				auto item = Hooks.data[i];
 
-				if (Pte->PageFrameNumber == item->PtePageFrameNumber) {
-
+				if (item && Pte->PageFrameNumber == item->PtePageFrameNumber) {
 					IsIsolationPage = true;
 					break;
 				}
